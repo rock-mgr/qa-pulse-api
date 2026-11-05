@@ -1,6 +1,12 @@
+// GEMINI CONNECTION
+const { GoogleGenAI } = require("@google/genai");
+
 // LOADING .env ENVIRONMENT
 // KEEP SENSITIVE SETTINGS APART
 require("dotenv").config();
+
+// INITIALIZE GEMINI AI CLIENT
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // IMPORTS EXPRESS 
 // EXPRESS IS NODEJS FRAMEWORK USED TO 
@@ -498,6 +504,162 @@ app.get("/profile", (req, res) => {
     // REJECT INVALID OR EXPIRED TOKENS
     res.status(401).json({ error: "Invalid or expired token" });
   }
+});
+
+// GET - TEST GEMINI AI CONNECTION
+// ARC: GET /gemini/test
+app.get("/gemini/test", async (req, res) => {
+    try {
+        // SEND TEST PROMPT TO GEMINI
+        const response = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: "Reply with: QA Pulse Gemini connection successful"
+        });
+
+        // RETURN GEMINI RESPONSE
+        res.json({ message: response.text });
+
+    } catch (error) {
+        // HANDLE GEMINI API ERRORS
+        console.error("Gemini error:", error.message);
+
+        res.status(500).json({
+            error: "Gemini connection failed"
+        });
+    }
+});
+
+// POST - SEARCH TEST CASES USING NATURAL LANGUAGE
+// ARC: POST /gemini/query
+app.post("/gemini/query", async (req, res) => {
+    try {
+        // VALIDATE QUESTION
+        const { question } = req.body;
+
+        if (typeof question !== "string" || !question.trim()) {
+            return res.status(400).json({ error: "Question is required" });
+        }
+
+        // ASK GEMINI TO GENERATE A SEARCH FILTER
+        const response = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: question,
+            config: {
+                systemInstruction: `
+                    Convert the user's question into a MongoDB filter.
+                    Only use the fields "status" and "priority".
+                    Return a JSON object containing a "filter" property.
+                    Only use exact string equality.
+                    Do not generate MongoDB operators or executable code.
+                    If the question cannot be answered using these fields,
+                    return {"filter":{}}.
+                `,
+                responseMimeType: "application/json"
+            }
+        });
+
+        // PARSE GEMINI RESPONSE
+        const generated = JSON.parse(response.text);
+
+        // VALIDATE GENERATED FILTER
+        const filter = generated.filter;
+
+        if (!filter || typeof filter !== "object" ||
+            Array.isArray(filter)) {
+            return res.status(422).json({ error: "Invalid AI-generated filter" });
+        }
+
+        const allowedFields = ["status", "priority"];
+
+        for (const [field, value] of Object.entries(filter)) {
+            if (!allowedFields.includes(field) ||
+                typeof value !== "string") {
+                return res.status(422).json({ error: "Unsupported AI-generated filter" });
+            }
+        }
+
+        // SEARCH TEST CASES IN MONGODB
+        const testCases = await db.collection("test_cases")
+            .find(filter)
+            .limit(50)
+            .toArray();
+
+        // RETURN FILTER AND MATCHING RESULTS
+        res.json({
+            question,
+            filter,
+            count: testCases.length,
+            results: testCases
+        });
+
+    } catch (error) {
+        // HANDLE AI OR DATABASE ERRORS
+        console.error("Gemini query error:", error.message);
+
+        res.status(500).json({ error: "AI query failed" });
+    }
+});
+
+
+// POST - GENERATE STRUCTURED TEST CASE USING GEMINI
+// ARC: POST /gemini/generate-test-case
+app.post("/gemini/generate-test-case", async (req, res) => {
+    try {
+        // VALIDATE REQUIREMENT
+        const { requirement } = req.body;
+
+        if (typeof requirement !== "string" || !requirement.trim()) {
+            return res.status(400).json({ error: "Requirement is required" });
+        }
+
+        // GENERATE STRUCTURED JSON USING SYSTEM INSTRUCTIONS
+        const response = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: requirement,
+            config: {
+                systemInstruction: `
+                    You are a software QA test case generator.
+                    Generate one test case based on the user's requirement.
+                    Return only a JSON object with these fields:
+                    title, description, status, priority.
+                    status must always be "Not Run".
+                    priority must be "Low", "Medium", or "High".
+                    Do not include additional fields.
+                `,
+                responseMimeType: "application/json"
+            }
+        });
+
+        // VALIDATE GENERATED RESPONSE
+        const testCase = JSON.parse(response.text);
+
+        if (
+            !testCase ||
+            typeof testCase !== "object" ||
+            Array.isArray(testCase) ||
+            typeof testCase.title !== "string" ||
+            !testCase.title.trim() ||
+            typeof testCase.description !== "string" ||
+            !testCase.description.trim() ||
+            testCase.status !== "Not Run" ||
+            !["Low", "Medium", "High"].includes(testCase.priority) ||
+            Object.keys(testCase).length !== 4
+        ) {
+            return res.status(422).json({ error: "Invalid AI-generated test case" });
+        }
+
+        // RETURN GENERATED TEST CASE
+        res.json({
+            message: "Test case generated successfully",
+            testCase
+        });
+
+    } catch (error) {
+        // HANDLE GEMINI ERRORS
+        console.error("Gemini generation error:", error.message);
+
+        res.status(500).json({ error: "Test case generation failed" });
+    }
 });
 
 // CONNECT TO MONGODB BEFORE STARTING EXPRESS SERVER
