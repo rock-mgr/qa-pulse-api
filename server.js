@@ -1,115 +1,155 @@
-
+// LOADING .env ENVIRONMENT
+// KEEP SENSITIVE SETTINGS APART
 require("dotenv").config();
 
+// IMPORTS EXPRESS 
+// EXPRESS IS NODEJS FRAMEWORK USED TO 
+// BUILD WEB SERVERS AND APIS
+// ALLOWS TO DEFINE ENDPOINTS
+// EG. GET/POST /Projects
+// EG. DELETE/PUT /Projects/:id
 const express = require("express");
+
+// IMPORTS MONGODB CONNECTION & DOCUMENT ID TOOLS
+// MongoClient - USED TO CONNECT NODEJS APP TO MONGODB
+// ObjectId - USED TO WORK WITH MONGODB DOCUMENT _id VALUES
 const { MongoClient, ObjectId } = require("mongodb");
 
+// INIT EXPRESS APPLICATION
+// ALLOWS API READ JSON REQUEST BODIES
 const app = express();
+// MIDDLEWARE - PARSE INCOMING JSON REQUEST BODIES
+// ALLOWS EXPRESS APP TO READ JSON DATA SENT BY ARC
 app.use(express.json());
+
+// USE CONFIGURED PORT OR 3000
 const PORT = process.env.PORT || 3000;
 
-// MongoDB connection
+// MONGODB CONNECTION - USE .env 
 const client = new MongoClient(process.env.MONGODB_URI);
+// MONGODB DATABASE
 const db = client.db("qa_pulse");
 
-// Test route
+// TEST ROUTE - HEALTH CHECK ENDPOINT
 app.get("/", (req, res) => {
-    res.json({
-        message: "QA Pulse API is running"
-    });
+    res.json({ message: "QA Pulse API is running" });
 });
 
-//GET
+//  GET - SEARCH PROJECTS BY NAME IN MONGODB 
+//  ARC - GET /projects/search?term=Testing 
 app.get("/projects/search", async (req, res) => {
     try {
+        // EG. req.query = { term: "Testing" }
         const { term } = req.query;
 
+        // VALIDATE SEARCH TERM
         if (!term || !term.trim()) {
-            return res.status(400).json({
-                error: "Search term is required"
-            });
+            return res.status(400).json({ error: "Search term is required" });
         }
 
+        // SEARCH PRODUCTS (CASE-INSENSITIVE)
         const projects = await db.collection("projects").find({
             name: { $regex: term, $options: "i" }
         }).toArray();
 
+        // RETURN MATCHING PROJECTS
         res.json(projects);
-    } catch (error) {
+
+    } catch (error) { 
+        // HANDLE SERVER ERRORS
         res.status(500).json({ error: error.message });
     }
 });
 
-//GET
+// GET - RETRIEVE ALL PROJECTS
+// ARC: GET /projects
 app.get("/projects", async (req, res) => {
     try {
+        // FETCH ALL PROJECTS FROM MONGODB
         const projects = await db.collection("projects").find({}).toArray();
+        
+        // RETURN PROJECTS AS JSON
         res.json(projects);
+
     } catch (error) {
+        // HANDLE SERVER ERRORS
         res.status(500).json({ error: error.message });
     }
 });
 
-// GET - Search test cases by title
+// GET - SEARCH TEST CASES BY TITLE
+// ARC: GET /test-cases/search?term=Login
 app.get("/test-cases/search", async (req, res) => {
     try {
+        // EXTRACT SEARCH TERM FROM URL
         const { term } = req.query;
 
+        // VALIDATE SEARCH TERM
         if (!term || !term.trim()) {
             return res.status(400).json({
                 error: "Search term is required"
             });
         }
 
+        // SEARCH TEST CASES (CASE-INSENSITIVE)
         const testCases = await db.collection("test_cases").find({
             title: { $regex: term, $options: "i" }
         }).toArray();
 
+        // RETURN MATCHING TEST CASES
         res.json(testCases);
 
     } catch (error) {
+        // HANDLE SERVER ERRORS
         res.status(500).json({ error: error.message });
     }
 });
 
-//GET
+// GET - RETRIEVE ALL TEST CASES
+// ARC: GET /test-cases
 app.get("/test-cases", async (req, res) => {
     try {
+        // FETCH ALL TEST CASES FROM MONGODB
         const testCases = await db.collection("test_cases").find({}).toArray();
 
+        // RETURN TEST CASES AS JSON
         res.json(testCases);
+
     } catch (error) {
+        // HANDLE SERVER ERRORS
         res.status(500).json({ error: error.message });
     }
 });
 
-// POST - Create a new test case
+// POST - CREATE A NEW TEST CASE
+// ARC: POST /test-cases
 app.post("/test-cases", async (req, res) => {
     try {
+        // EXTRACT TEST CASE DATA FROM REQUEST BODY
         const { title, description, status, priority, projectId } = req.body;
 
+        // VALIDATE REQUIRED FIELDS
         if (!title || !description || !status || !priority || !projectId) {
             return res.status(400).json({
                 error: "All test case fields are required"
             });
         }
 
+        // VALIDATE PROJECT ID FORMAT
         if (!ObjectId.isValid(projectId)) {
-            return res.status(400).json({
-                error: "Invalid project ID"
-            });
+            return res.status(400).json({ error: "Invalid project ID" });
         }
 
+        // CHECK IF REFERENCED PROJECT EXISTS
         const project = await db.collection("projects").findOne({
             _id: new ObjectId(projectId)
         });
 
         if (!project) {
-            return res.status(404).json({
-                error: "Project not found"
-            });
+            return res.status(404).json({ error: "Project not found" });
         }
 
+        // PREPARE NEW TEST CASE DOCUMENT
         const newTestCase = {
             title,
             description,
@@ -118,14 +158,17 @@ app.post("/test-cases", async (req, res) => {
             projectId: new ObjectId(projectId)
         };
 
+        // INSERT TEST CASE INTO MONGODB
         const result = await db.collection("test_cases").insertOne(newTestCase);
 
+        // RETURN SUCCESS RESPONSE
         res.status(201).json({
             message: "Test case created successfully",
             insertedId: result.insertedId
         });
 
     } catch (error) {
+        // HANDLE SERVER ERRORS
         res.status(500).json({ error: error.message });
     }
 });
@@ -452,6 +495,7 @@ async function startServer() {
 
         console.log("Connected to MongoDB Atlas");
 
+        // START SERVER LISTENING FOR REQUESTS
         app.listen(PORT, () => {
             console.log(`QA Pulse API running on port ${PORT}`);
         });
