@@ -173,17 +173,21 @@ app.post("/test-cases", async (req, res) => {
     }
 });
 
-//POST
+// POST - CREATE A NEW PROJECT
+// ARC: POST /projects
 app.post("/projects", async (req, res) => {
     try {
+        // EXTRACT PROJECT DATA FROM REQUEST BODY
         const { name, description, status } = req.body;
 
+        // VALIDATE REQUIRED FIELDS
         if (!name || !description || !status) {
             return res.status(400).json({
                 error: "Name, description and status are required"
             });
         }
 
+        // PREPARE NEW PROJECT DOCUMENT
         const newProject = {
             name,
             description,
@@ -191,35 +195,40 @@ app.post("/projects", async (req, res) => {
             createdAt: new Date().toISOString()
         };
 
+        // INSERT PROJECT INTO MONGODB
         const result = await db.collection("projects").insertOne(newProject);
 
+        // RETURN SUCCESS RESPONSE
         res.status(201).json({
             message: "Project created successfully",
             insertedId: result.insertedId
         });
+
     } catch (error) {
+        // HANDLE SERVER ERRORS
         res.status(500).json({ error: error.message });
     }
 });
 
-// PUT - Update an existing test case
+// PUT - UPDATE AN EXISTING TEST CASE
+// ARC: PUT /test-cases/:id
 app.put("/test-cases/:id", async (req, res) => {
     try {
+        // EXTRACT TEST CASE ID AND UPDATED DATA
         const { id } = req.params;
         const { title, description, status, priority } = req.body;
 
+        // VALIDATE TEST CASE ID FORMAT
         if (!ObjectId.isValid(id)) {
-            return res.status(400).json({
-                error: "Invalid test case ID"
-            });
+            return res.status(400).json({ error: "Invalid test case ID" });
         }
 
+        // VALIDATE REQUIRED FIELDS
         if (!title || !description || !status || !priority) {
-            return res.status(400).json({
-                error: "All test case fields are required"
-            });
+            return res.status(400).json({ error: "All test case fields are required" });
         }
 
+        // UPDATE TEST CASE IN MONGODB
         const result = await db.collection("test_cases").updateOne(
             { _id: new ObjectId(id) },
             {
@@ -232,40 +241,41 @@ app.put("/test-cases/:id", async (req, res) => {
             }
         );
 
+        // CHECK IF TEST CASE EXISTS
         if (result.matchedCount === 0) {
-            return res.status(404).json({
-                error: "Test case not found"
-            });
+            return res.status(404).json({ error: "Test case not found" });
         }
 
-        res.json({
-            message: "Test case updated successfully"
-        });
+        // RETURN SUCCESS RESPONSE
+        res.json({ message: "Test case updated successfully" });
 
     } catch (error) {
+        // HANDLE SERVER ERRORS
         res.status(500).json({ error: error.message });
     }
 });
 
-//PUT
+// PUT - UPDATE AN EXISTING PROJECT
+// ARC: PUT /projects/:id
 app.put("/projects/:id", async (req, res) => {
     try {
         const { ObjectId } = require("mongodb");
+
+        // EXTRACT PROJECT ID AND UPDATED DATA
         const { id } = req.params;
         const { name, description, status } = req.body;
 
+        // VALIDATE PROJECT ID FORMAT
         if (!ObjectId.isValid(id)) {
-            return res.status(400).json({
-                error: "Invalid project ID"
-            });
+            return res.status(400).json({ error: "Invalid project ID" });
         }
 
+        // VALIDATE REQUIRED FIELDS
         if (!name || !description || !status) {
-            return res.status(400).json({
-                error: "Name, description and status are required"
-            });
+            return res.status(400).json({ error: "Name, description and status are required" });
         }
 
+        // UPDATE PROJECT IN MONGODB
         const result = await db.collection("projects").updateOne(
             { _id: new ObjectId(id) },
             {
@@ -277,123 +287,129 @@ app.put("/projects/:id", async (req, res) => {
             }
         );
 
+        // CHECK IF PROJECT EXISTS
         if (result.matchedCount === 0) {
-            return res.status(404).json({
-                error: "Project not found"
-            });
+            return res.status(404).json({ error: "Project not found" });
         }
 
-        res.json({
-            message: "Project updated successfully"
-        });
+        // RETURN SUCCESS RESPONSE
+        res.json({ message: "Project updated successfully" });
+
     } catch (error) {
+        // HANDLE SERVER ERRORS
         res.status(500).json({ error: error.message });
     }
 });
 
-// DELETE
+// DELETE - REMOVE AN EXISTING PROJECT
+// ARC: DELETE /projects/:id
 app.delete("/projects/:id", async (req, res) => {
     try {
         const { ObjectId } = require("mongodb");
+        
+        // EXTRACT PROJECT ID FROM URL
         const { id } = req.params;
 
+        // VALIDATE PROJECT ID FORMAT
         if (!ObjectId.isValid(id)) {
-            return res.status(400).json({
-                error: "Invalid project ID"
-            });
+            return res.status(400).json({ error: "Invalid project ID" });
         }
 
+        // DELETE PROJECT FROM MONGODB
         const result = await db.collection("projects").deleteOne({
             _id: new ObjectId(id)
         });
 
+        // CHECK IF PROJECT WAS DELETED
         if (result.deletedCount === 0) {
-            return res.status(404).json({
-                error: "Project not found"
-            });
+            return res.status(404).json({ error: "Project not found" });
         }
 
-        res.json({
-            message: "Project deleted successfully"
-        });
+        // RETURN SUCCESS RESPONSE
+        res.json({ message: "Project deleted successfully" });
+    
     } catch (error) {
+        // HANDLE SERVER ERRORS
         res.status(500).json({ error: error.message });
     }
 });
 
-// DELETE - Delete a test case by ID
+// DELETE - REMOVE AN EXISTING TEST CASE
+// ARC: DELETE /test-cases/:id
 app.delete("/test-cases/:id", async (req, res) => {
     try {
         const { ObjectId } = require("mongodb");
 
+        // VALIDATE TEST CASE ID FORMAT
         if (!ObjectId.isValid(req.params.id)) {
-            return res.status(400).json({
-                error: "Invalid test case ID"
-            });
+            return res.status(400).json({ error: "Invalid test case ID" });
         }
 
+        // DELETE TEST CASE FROM MONGODB
         const result = await db.collection("test_cases").deleteOne({
             _id: new ObjectId(req.params.id)
         });
 
+        // CHECK IF TEST CASE WAS DELETED
         if (result.deletedCount === 0) {
-            return res.status(404).json({
-                error: "Test case not found"
-            });
+            return res.status(404).json({ error: "Test case not found" });
         }
 
-        res.json({
-            message: "Test case deleted successfully"
-        });
+        // RETURN SUCCESS RESPONSE
+        res.json({ message: "Test case deleted successfully" });
 
     } catch (error) {
+        // HANDLE SERVER ERRORS
         res.status(500).json({ error: error.message });
     }
 });
 
-// POST - Register a new user
+// POST - REGISTER A NEW USER
+// ARC: POST /signup
 app.post("/signup", async (req, res) => {
     try {
         const bcrypt = require("bcrypt");
 
+        // EXTRACT USER REGISTRATION DATA
         const { email, password } = req.body;
 
+        // VALIDATE REQUIRED FIELDS
         if (!email || !password) {
-            return res.status(400).json({
-                error: "Email and password are required"
-            });
+            return res.status(400).json({ error: "Email and password are required" });
         }
 
+        // VALIDATE MINIMUM PASSWORD LENGTH
         if (password.length < 8) {
-            return res.status(400).json({
-                error: "Password must be at least 8 characters"
-            });
+            return res.status(400).json({ error: "Password must be at least 8 characters" });
         }
 
+        // CHECK IF EMAIL IS ALREADY REGISTERED
         const existingUser = await db.collection("users").findOne({
             email: email.toLowerCase()
         });
 
         if (existingUser) {
-            return res.status(409).json({
-                error: "Email already registered"
-            });
+            return res.status(409).json({ error: "Email already registered" });
         }
 
+        // HASH PASSWORD BEFORE STORING
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        // INSERT NEW USER INTO MONGODB
         const result = await db.collection("users").insertOne({
             email: email.toLowerCase(),
             password: hashedPassword,
             createdAt: new Date()
         });
 
+        // RETURN SUCCESS RESPONSE
         res.status(201).json({
             message: "User registered successfully",
             userId: result.insertedId
         });
 
     } catch (error) {
+        // LOG AND HANDLE REGISTRATION ERRORS
         console.error("Signup error:", error.message);
 
         res.status(500).json({
@@ -402,78 +418,76 @@ app.post("/signup", async (req, res) => {
     }
 });
 
-// POST - Login user and generate JWT
+// POST - LOGIN USER AND GENERATE JWT
+// ARC: POST /login
 app.post("/login", async (req, res) => {
   try {
     const bcrypt = require("bcrypt");
     const jwt = require("jsonwebtoken");
 
+    // EXTRACT LOGIN CREDENTIALS
     const { email, password } = req.body;
 
+    // VALIDATE REQUIRED FIELDS
     if (!email || !password) {
-      return res.status(400).json({
-        error: "Email and password are required"
-      });
+      return res.status(400).json({ error: "Email and password are required" });
     }
 
-    // Find the registered user
+    // FIND REGISTERED USER
     const user = await db.collection("users").findOne({ email });
 
     if (!user) {
-      return res.status(401).json({
-        error: "Invalid email or password"
-      });
+      return res.status(401).json({ error: "Invalid email or password" });
     }
 
-    // Compare entered password with stored bcrypt hash
+    // VERIFY PASSWORD AGAINST STORED HASH
     const passwordMatch = await bcrypt.compare(password, user.password);
 
     if (!passwordMatch) {
-      return res.status(401).json({
-        error: "Invalid email or password"
-      });
+      return res.status(401).json({ error: "Invalid email or password" });
     }
 
-    // Generate JWT token
+    // GENERATE JWT TOKEN (EXPIRES IN 1 HOUR)
     const token = jwt.sign(
       { userId: user._id.toString(), email: user.email },
       process.env.JWT_SECRET,
       { expiresIn: "1h" }
     );
 
+    // RETURN TOKEN AFTER SUCCESSFUL LOGIN
     res.json({
       message: "Login successful",
       token: token
     });
 
   } catch (error) {
+    // LOG AND HANDLE LOGIN ERRORS
     console.error("Login error:", error.message);
-    res.status(500).json({
-      error: "Login failed"
-    });
+    res.status(500).json({ error: "Login failed" });
   }
 });
 
-// GET - Protected route using JWT
+// GET - ACCESS PROTECTED PROFILE USING JWT
+// ARC: GET /profile
 app.get("/profile", (req, res) => {
   const jwt = require("jsonwebtoken");
 
-  // Read Authorization header
+  // READ AUTHORIZATION HEADER
   const authHeader = req.headers.authorization;
 
+  // CHECK IF BEARER TOKEN IS PROVIDED
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({
-      error: "Access denied. Token required"
-    });
+    return res.status(401).json({ error: "Access denied. Token required" });
   }
 
-  // Extract token after "Bearer "
+  // EXTRACT JWT FROM AUTHORIZATION HEADER
   const token = authHeader.split(" ")[1];
 
   try {
-    // Verify token using our secret key
+    // VERIFY JWT SIGNATURE AND EXPIRATION
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+    // RETURN USER INFORMATION FROM VERIFIED TOKEN
     res.json({
       message: "Protected route accessed successfully",
       userId: decoded.userId,
@@ -481,25 +495,27 @@ app.get("/profile", (req, res) => {
     });
 
   } catch (error) {
-    res.status(401).json({
-      error: "Invalid or expired token"
-    });
+    // REJECT INVALID OR EXPIRED TOKENS
+    res.status(401).json({ error: "Invalid or expired token" });
   }
 });
 
-// Connect to MongoDB before starting Express
+// CONNECT TO MONGODB BEFORE STARTING EXPRESS SERVER
 async function startServer() {
     try {
+        // ESTABLISH MONGODB CONNECTION
         await client.connect();
+
+        // VERIFY MONGODB CONNECTION
         await db.command({ ping: 1 });
 
         console.log("Connected to MongoDB Atlas");
 
-        // START SERVER LISTENING FOR REQUESTS
-        app.listen(PORT, () => {
-            console.log(`QA Pulse API running on port ${PORT}`);
-        });
+        // START EXPRESS SERVER
+        app.listen(PORT, () => { console.log(`QA Pulse API running on port ${PORT}`); });
+
     } catch (error) {
+        // HANDLE MONGODB CONNECTION FAILURE
         console.error("MongoDB connection failed:", error.message);
         process.exit(1);
     }
