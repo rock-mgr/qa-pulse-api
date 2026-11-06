@@ -607,7 +607,14 @@ app.post("/gemini/query", async (req, res) => {
 
         // SEARCH TEST CASES IN MONGODB
         const testCases = await db.collection("test_cases")
-            .find(filter)
+            .find(
+                Object.fromEntries(
+                    Object.entries(filter).map(([field, value]) => [
+                        field,
+                        { $regex: `^${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" }
+                    ])
+                )
+            )
             .limit(50)
             .toArray();
 
