@@ -61,7 +61,7 @@ app.get("/projects/search", async (req, res) => {
         // RETURN MATCHING PROJECTS
         res.json(projects);
 
-    } catch (error) { 
+    } catch (error) {
         // HANDLE SERVER ERRORS
         res.status(500).json({ error: error.message });
     }
@@ -73,7 +73,7 @@ app.get("/projects", async (req, res) => {
     try {
         // FETCH ALL PROJECTS FROM MONGODB
         const projects = await db.collection("projects").find({}).toArray();
-        
+
         // RETURN PROJECTS AS JSON
         res.json(projects);
 
@@ -134,11 +134,15 @@ app.post("/test-cases", async (req, res) => {
         // EXTRACT TEST CASE DATA FROM REQUEST BODY
         const { title, description, status, priority, projectId } = req.body;
 
-        // VALIDATE REQUIRED FIELDS
-        if (!title || !description || !status || !priority || !projectId) {
-            return res.status(400).json({
-                error: "All test case fields are required"
-            });
+        // VALIDATE REQUIRED FIELDS AND IDENTIFY MISSING VALUES
+        const requiredFields = ["title", "description", "status", "priority", "projectId"];
+
+        const missingFields = requiredFields.filter(field =>
+            typeof req.body[field] !== "string" || !req.body[field].trim()
+        );
+
+        if (missingFields.length > 0) {
+            return res.status(400).json({ error: "Missing or invalid required fields", missingFields });
         }
 
         // VALIDATE PROJECT ID FORMAT
@@ -186,11 +190,15 @@ app.post("/projects", async (req, res) => {
         // EXTRACT PROJECT DATA FROM REQUEST BODY
         const { name, description, status } = req.body;
 
-        // VALIDATE REQUIRED FIELDS
-        if (!name || !description || !status) {
-            return res.status(400).json({
-                error: "Name, description and status are required"
-            });
+        // VALIDATE REQUIRED FIELDS AND IDENTIFY MISSING VALUES
+        const requiredFields = ["name", "description", "status"];
+
+        const missingFields = requiredFields.filter(field =>
+            typeof req.body[field] !== "string" || !req.body[field].trim()
+        );
+
+        if (missingFields.length > 0) {
+            return res.status(400).json({ error: "Missing or invalid required fields", missingFields });
         }
 
         // PREPARE NEW PROJECT DOCUMENT
@@ -252,6 +260,11 @@ app.put("/test-cases/:id", async (req, res) => {
             return res.status(404).json({ error: "Test case not found" });
         }
 
+        // CHECK IF ANY VALUES WERE ACTUALLY CHANGED
+        if (result.modifiedCount === 0) {
+            return res.status(200).json({ message: "No changes detected. Test case already has these values" });
+        }
+
         // RETURN SUCCESS RESPONSE
         res.json({ message: "Test case updated successfully" });
 
@@ -265,7 +278,6 @@ app.put("/test-cases/:id", async (req, res) => {
 // ARC: PUT /projects/:id
 app.put("/projects/:id", async (req, res) => {
     try {
-        const { ObjectId } = require("mongodb");
 
         // EXTRACT PROJECT ID AND UPDATED DATA
         const { id } = req.params;
@@ -298,6 +310,11 @@ app.put("/projects/:id", async (req, res) => {
             return res.status(404).json({ error: "Project not found" });
         }
 
+        // CHECK IF ANY VALUES WERE ACTUALLY CHANGED
+        if (result.modifiedCount === 0) {
+            return res.status(200).json({ message: "No changes detected. Project already has these values" });
+        }
+
         // RETURN SUCCESS RESPONSE
         res.json({ message: "Project updated successfully" });
 
@@ -311,14 +328,25 @@ app.put("/projects/:id", async (req, res) => {
 // ARC: DELETE /projects/:id
 app.delete("/projects/:id", async (req, res) => {
     try {
-        const { ObjectId } = require("mongodb");
-        
+
         // EXTRACT PROJECT ID FROM URL
         const { id } = req.params;
 
         // VALIDATE PROJECT ID FORMAT
         if (!ObjectId.isValid(id)) {
             return res.status(400).json({ error: "Invalid project ID" });
+        }
+
+        // PREVENT DELETION IF TEST CASES REFERENCE THIS PROJECT
+        const linkedTestCases = await db.collection("test_cases").countDocuments({
+            projectId: new ObjectId(id)
+        });
+
+        if (linkedTestCases > 0) {
+            return res.status(409).json({
+                error: "Cannot delete project with linked test cases",
+                linkedTestCases
+            });
         }
 
         // DELETE PROJECT FROM MONGODB
@@ -333,7 +361,7 @@ app.delete("/projects/:id", async (req, res) => {
 
         // RETURN SUCCESS RESPONSE
         res.json({ message: "Project deleted successfully" });
-    
+
     } catch (error) {
         // HANDLE SERVER ERRORS
         res.status(500).json({ error: error.message });
@@ -344,7 +372,6 @@ app.delete("/projects/:id", async (req, res) => {
 // ARC: DELETE /test-cases/:id
 app.delete("/test-cases/:id", async (req, res) => {
     try {
-        const { ObjectId } = require("mongodb");
 
         // VALIDATE TEST CASE ID FORMAT
         if (!ObjectId.isValid(req.params.id)) {
@@ -427,83 +454,83 @@ app.post("/signup", async (req, res) => {
 // POST - LOGIN USER AND GENERATE JWT
 // ARC: POST /login
 app.post("/login", async (req, res) => {
-  try {
-    const bcrypt = require("bcrypt");
-    const jwt = require("jsonwebtoken");
+    try {
+        const bcrypt = require("bcrypt");
+        const jwt = require("jsonwebtoken");
 
-    // EXTRACT LOGIN CREDENTIALS
-    const { email, password } = req.body;
+        // EXTRACT LOGIN CREDENTIALS
+        const { email, password } = req.body;
 
-    // VALIDATE REQUIRED FIELDS
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required" });
+        // VALIDATE REQUIRED FIELDS
+        if (!email || !password) {
+            return res.status(400).json({ error: "Email and password are required" });
+        }
+
+        // FIND REGISTERED USER
+        const user = await db.collection("users").findOne({ email: email.toLowerCase() });
+
+        if (!user) {
+            return res.status(401).json({ error: "Invalid email or password" });
+        }
+
+        // VERIFY PASSWORD AGAINST STORED HASH
+        const passwordMatch = await bcrypt.compare(password, user.password);
+
+        if (!passwordMatch) {
+            return res.status(401).json({ error: "Invalid email or password" });
+        }
+
+        // GENERATE JWT TOKEN (EXPIRES IN 1 HOUR)
+        const token = jwt.sign(
+            { userId: user._id.toString(), email: user.email },
+            process.env.JWT_SECRET,
+            { expiresIn: "1h" }
+        );
+
+        // RETURN TOKEN AFTER SUCCESSFUL LOGIN
+        res.json({
+            message: "Login successful",
+            token: token
+        });
+
+    } catch (error) {
+        // LOG AND HANDLE LOGIN ERRORS
+        console.error("Login error:", error.message);
+        res.status(500).json({ error: "Login failed" });
     }
-
-    // FIND REGISTERED USER
-    const user = await db.collection("users").findOne({ email });
-
-    if (!user) {
-      return res.status(401).json({ error: "Invalid email or password" });
-    }
-
-    // VERIFY PASSWORD AGAINST STORED HASH
-    const passwordMatch = await bcrypt.compare(password, user.password);
-
-    if (!passwordMatch) {
-      return res.status(401).json({ error: "Invalid email or password" });
-    }
-
-    // GENERATE JWT TOKEN (EXPIRES IN 1 HOUR)
-    const token = jwt.sign(
-      { userId: user._id.toString(), email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: "1h" }
-    );
-
-    // RETURN TOKEN AFTER SUCCESSFUL LOGIN
-    res.json({
-      message: "Login successful",
-      token: token
-    });
-
-  } catch (error) {
-    // LOG AND HANDLE LOGIN ERRORS
-    console.error("Login error:", error.message);
-    res.status(500).json({ error: "Login failed" });
-  }
 });
 
 // GET - ACCESS PROTECTED PROFILE USING JWT
 // ARC: GET /profile
 app.get("/profile", (req, res) => {
-  const jwt = require("jsonwebtoken");
+    const jwt = require("jsonwebtoken");
 
-  // READ AUTHORIZATION HEADER
-  const authHeader = req.headers.authorization;
+    // READ AUTHORIZATION HEADER
+    const authHeader = req.headers.authorization;
 
-  // CHECK IF BEARER TOKEN IS PROVIDED
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Access denied. Token required" });
-  }
+    // CHECK IF BEARER TOKEN IS PROVIDED
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Access denied. Token required" });
+    }
 
-  // EXTRACT JWT FROM AUTHORIZATION HEADER
-  const token = authHeader.split(" ")[1];
+    // EXTRACT JWT FROM AUTHORIZATION HEADER
+    const token = authHeader.split(" ")[1];
 
-  try {
-    // VERIFY JWT SIGNATURE AND EXPIRATION
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    try {
+        // VERIFY JWT SIGNATURE AND EXPIRATION
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // RETURN USER INFORMATION FROM VERIFIED TOKEN
-    res.json({
-      message: "Protected route accessed successfully",
-      userId: decoded.userId,
-      email: decoded.email
-    });
+        // RETURN USER INFORMATION FROM VERIFIED TOKEN
+        res.json({
+            message: "Protected route accessed successfully",
+            userId: decoded.userId,
+            email: decoded.email
+        });
 
-  } catch (error) {
-    // REJECT INVALID OR EXPIRED TOKENS
-    res.status(401).json({ error: "Invalid or expired token" });
-  }
+    } catch (error) {
+        // REJECT INVALID OR EXPIRED TOKENS
+        res.status(401).json({ error: "Invalid or expired token" });
+    }
 });
 
 // GET - TEST GEMINI AI CONNECTION
@@ -659,6 +686,130 @@ app.post("/gemini/generate-test-case", async (req, res) => {
         console.error("Gemini generation error:", error.message);
 
         res.status(500).json({ error: "Test case generation failed" });
+    }
+});
+
+// POST - GENERATE AND SAVE MOCK TEST CASES USING GEMINI
+// ARC: POST /gemini/generate-mock-data
+app.post("/gemini/generate-mock-data", async (req, res) => {
+    try {
+        // EXTRACT PROJECT ID AND TESTING REQUIREMENT
+        const { projectId, requirement } = req.body;
+
+        // VALIDATE REQUEST FIELDS
+        if (!ObjectId.isValid(projectId) ||
+            typeof requirement !== "string" ||
+            !requirement.trim()) {
+            return res.status(400).json({ error: "Valid projectId and requirement are required" });
+        }
+
+        // CHECK THAT THE PROJECT EXISTS
+        const project = await db.collection("projects").findOne({
+            _id: new ObjectId(projectId)
+        });
+
+        if (!project) {
+            return res.status(404).json({ error: "Project not found" });
+        }
+
+        // ASK GEMINI TO GENERATE THREE MOCK TEST CASES
+        const response = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: requirement,
+            config: {
+                systemInstruction: `
+                    You are a software QA test data generator.
+                    Generate exactly 3 distinct mock test cases
+                    based on the user's testing requirement.
+
+                    Return a JSON object with one property:
+                    "testCases", containing an array of 3 objects.
+
+                    Each test case must contain exactly:
+                    title, description, status, priority.
+
+                    status must always be "Not Run".
+                    priority must be "Low", "Medium", or "High".
+                    Use realistic and distinct test scenarios.
+                    Do not include additional fields.
+                `,
+                responseMimeType: "application/json"
+            }
+        });
+
+        // PARSE AND VALIDATE GEMINI RESPONSE
+        const generated = JSON.parse(response.text);
+        const testCases = generated?.testCases;
+
+        if (!Array.isArray(testCases) || testCases.length !== 3) {
+            return res.status(422).json({ error: "Gemini did not generate exactly 3 test cases" });
+        }
+
+        const valid = testCases.every(testCase =>
+            testCase &&
+            typeof testCase === "object" &&
+            !Array.isArray(testCase) &&
+            Object.keys(testCase).length === 4 &&
+            typeof testCase.title === "string" &&
+            testCase.title.trim() &&
+            typeof testCase.description === "string" &&
+            testCase.description.trim() &&
+            testCase.status === "Not Run" &&
+            ["Low", "Medium", "High"].includes(testCase.priority)
+        );
+
+        if (!valid) {
+            return res.status(422).json({ error: "Invalid AI-generated mock test cases" });
+        }
+
+        // PREVENT DUPLICATE TITLES WITHIN THE GENERATED BATCH
+        const titles = testCases.map(testCase =>
+            testCase.title.trim().toLowerCase()
+        );
+
+        if (new Set(titles).size !== titles.length) {
+            return res.status(422).json({ error: "Gemini generated duplicate test case titles" });
+        }
+
+        // PREVENT DUPLICATES ALREADY STORED FOR THIS PROJECT
+        const existing = await db.collection("test_cases").find({
+            projectId: new ObjectId(projectId)
+        }).project({ title: 1 }).toArray();
+
+        const existingTitles = new Set(
+            existing.map(testCase => testCase.title.trim().toLowerCase())
+        );
+
+        if (titles.some(title => existingTitles.has(title))) {
+            return res.status(409).json({ error: "One or more generated test cases already exist in this project" });
+        }
+
+        // LINK GENERATED TEST CASES TO THE EXISTING PROJECT
+        const mockData = testCases.map(testCase => ({
+            title: testCase.title.trim(),
+            description: testCase.description.trim(),
+            status: testCase.status,
+            priority: testCase.priority,
+            projectId: new ObjectId(projectId)
+        }));
+
+        // SAVE MOCK DATA TO MONGODB
+        const result = await db.collection("test_cases").insertMany(mockData);
+
+        // RETURN GENERATED RECORDS AND INSERTED IDS
+        res.status(201).json({
+            message: "AI-generated mock test cases saved successfully",
+            projectId,
+            insertedCount: result.insertedCount,
+            insertedIds: result.insertedIds,
+            testCases: mockData
+        });
+
+    } catch (error) {
+        // HANDLE GEMINI OR DATABASE ERRORS
+        console.error("Mock data generation error:", error.message);
+
+        res.status(500).json({ error: "Mock data generation failed" });
     }
 });
 
